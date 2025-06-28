@@ -28,13 +28,24 @@ int main(int argc, char* argv[]) {
     );
 
     std::string outputFilename = Utils::generateOutputFilename(config.getRootPath());
+    
+    // Security: Ensure output filename is safe and doesn't contain path traversal
+    std::filesystem::path outputPath = std::filesystem::current_path() / outputFilename;
+    try {
+        outputPath = std::filesystem::canonical(outputPath.parent_path()) / outputPath.filename();
+    } catch (...) {
+        std::cerr << "❌ Cannot resolve output path for security validation" << std::endl;
+        return 1;
+    }
+    
     std::shared_ptr<IWriter> writer;
 
     if (config.outputAsJson()) {
-        outputFilename = outputFilename.substr(0, outputFilename.find_last_of('.')) + ".json";
-        writer = std::make_shared<FileWriterJson>(outputFilename, config.shouldStripComments());
+        outputFilename = outputPath.stem().string() + ".json";
+        outputPath = outputPath.parent_path() / outputFilename;
+        writer = std::make_shared<FileWriterJson>(outputPath.string(), config.shouldStripComments());
     } else {
-        writer = std::make_shared<FileWriterText>(outputFilename, config.shouldStripComments());
+        writer = std::make_shared<FileWriterText>(outputPath.string(), config.shouldStripComments());
     }
 
     DirectoryWalker walker(
@@ -45,6 +56,6 @@ int main(int argc, char* argv[]) {
 
     walker.walk();
 
-    std::cout << "✅ Done! Output written to: " << outputFilename << "\n";
+    std::cout << "✅ Done! Output written to: " << outputPath << "\n";
     return 0;
 }
