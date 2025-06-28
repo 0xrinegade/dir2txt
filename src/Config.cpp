@@ -29,6 +29,14 @@ Config::Config(int argc, char* argv[]) {
 
         rootPath = std::filesystem::path(result["directory"].as<std::string>());
 
+        // Security: Validate and canonicalize the root path
+        try {
+            rootPath = std::filesystem::canonical(rootPath);
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << "❌ Cannot resolve directory path: " << rootPath << " - " << e.what() << std::endl;
+            std::exit(1);
+        }
+
         if (!std::filesystem::exists(rootPath) || !std::filesystem::is_directory(rootPath)) {
             std::cerr << "❌ Invalid directory: " << rootPath << std::endl;
             std::exit(1);
