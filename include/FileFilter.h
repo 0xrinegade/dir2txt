@@ -11,7 +11,9 @@ class FileFilter : public IFileFilter {
 public:
     FileFilter(bool includeDotfiles,
                std::set<std::string> ignoredDirs,
-               const std::filesystem::path& rootPath);
+               const std::filesystem::path& rootPath,
+               size_t maxAsteriskCount = 5,
+               size_t maxDotCount = 10);
 
     bool isBinary(const std::filesystem::path& filePath) const override;
     bool shouldIgnore(const std::filesystem::path& path) const override;

@@ -10,6 +10,9 @@ public:
     // Strips comments from the input file and returns lines with comments removed
     static std::vector<std::string> strip(const std::filesystem::path& filePath);
     
+    // Decoupled logic for processing lines (improved testability)
+    static std::vector<std::string> processLines(const std::vector<std::string>& inputLines);
+    
     // Public utility function for UTF-8 safe line truncation
     static std::string truncateLineIfNeeded(const std::string& line);
 

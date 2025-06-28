@@ -10,11 +10,14 @@ const std::set<std::string> FileFilter::alwaysIgnored = {
 
 FileFilter::FileFilter(bool includeDotfiles,
                        std::set<std::string> ignoredDirs,
-                       const std::filesystem::path& rootPath)
+                       const std::filesystem::path& rootPath,
+                       size_t maxAsteriskCount,
+                       size_t maxDotCount)
     : includeDotfiles(includeDotfiles),
       ignoredDirs(std::move(ignoredDirs)),
       root(rootPath),
       ignoreParser(std::make_unique<UniversalIgnoreParser>()) {
+        ignoreParser->setComplexityLimits(maxAsteriskCount, maxDotCount);
         ignoreParser->loadFromDirectory(root);
         // Apply --ignore overrides
         for (const auto& entry : this->ignoredDirs) {
@@ -36,6 +39,25 @@ bool FileFilter::isBinary(const std::filesystem::path& filePath) const {
     // Security: Validate bytesRead is within expected bounds
     if (bytesRead < 0 || static_cast<size_t>(bytesRead) > maxBytes) {
         return true;  // Treat as binary if unexpected read size
+    }
+
+    // Check for UTF-16 BOM (Byte Order Mark)
+    if (bytesRead >= 2) {
+        unsigned char b1 = static_cast<unsigned char>(buffer[0]);
+        unsigned char b2 = static_cast<unsigned char>(buffer[1]);
+        
+        // UTF-16 LE BOM (FF FE) or UTF-16 BE BOM (FE FF)
+        if ((b1 == 0xFF && b2 == 0xFE) || (b1 == 0xFE && b2 == 0xFF)) {
+            return false;  // UTF-16 text file with BOM
+        }
+        
+        // UTF-8 BOM (EF BB BF)
+        if (bytesRead >= 3) {
+            unsigned char b3 = static_cast<unsigned char>(buffer[2]);
+            if (b1 == 0xEF && b2 == 0xBB && b3 == 0xBF) {
+                return false;  // UTF-8 text file with BOM
+            }
+        }
     }
 
     size_t nonPrintable = 0;

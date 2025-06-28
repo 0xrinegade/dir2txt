@@ -17,6 +17,8 @@ Config::Config(int argc, char* argv[]) {
             ("s,strip-comments", "Strip comments from source files")
             ("j,json", "Output results in JSON format")
             ("v,verbose", "Enable verbose logging of skipped files and directories")
+            ("max-asterisk", "Maximum number of asterisks in ignore patterns (default: 5)", cxxopts::value<size_t>())
+            ("max-dots", "Maximum number of dots in ignore patterns (default: 10)", cxxopts::value<size_t>())
             ("h,help", "Print usage")
             ("directory", "Root directory", cxxopts::value<std::string>());
 
@@ -93,6 +95,14 @@ Config::Config(int argc, char* argv[]) {
         asJson = result.count("json") > 0;
         enableLogging = result.count("verbose") > 0;
         
+        // Configure regex pattern complexity limits
+        if (result.count("max-asterisk")) {
+            maxAsteriskCount = result["max-asterisk"].as<size_t>();
+        }
+        if (result.count("max-dots")) {
+            maxDotCount = result["max-dots"].as<size_t>();
+        }
+        
     } catch (const std::exception& e) {
         std::cerr << "❌ Argument parsing error: " << e.what() << std::endl;
         std::exit(1);
@@ -121,4 +131,12 @@ bool Config::outputAsJson() const {
 
 bool Config::shouldEnableLogging() const {
     return enableLogging;
+}
+
+size_t Config::getMaxAsteriskCount() const {
+    return maxAsteriskCount;
+}
+
+size_t Config::getMaxDotCount() const {
+    return maxDotCount;
 }

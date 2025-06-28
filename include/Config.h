@@ -1,6 +1,7 @@
 // include/Config.h
 #pragma once
 
+#include "Constants.h"
 #include <filesystem>   // for std::filesystem::path
 #include <set>          // for std::set
 #include <string>       // for std::string
@@ -15,6 +16,8 @@ class Config {
         bool shouldStripComments() const;
         bool outputAsJson() const;
         bool shouldEnableLogging() const;
+        size_t getMaxAsteriskCount() const;
+        size_t getMaxDotCount() const;
     
     private:
         std::filesystem::path rootPath;
@@ -23,4 +26,6 @@ class Config {
         bool stripComments = false;
         bool asJson = false;
         bool enableLogging = false;
+        size_t maxAsteriskCount = Constants::MAX_ASTERISK_COUNT;
+        size_t maxDotCount = Constants::MAX_DOT_COUNT;
     };

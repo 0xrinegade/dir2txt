@@ -24,7 +24,9 @@ int main(int argc, char* argv[]) {
     auto filter = std::make_shared<FileFilter>(
         config.shouldIncludeDotfiles(),
         config.getIgnoredDirs(),
-        config.getRootPath()
+        config.getRootPath(),
+        config.getMaxAsteriskCount(),
+        config.getMaxDotCount()
     );
 
     std::string outputFilename = Utils::generateOutputFilename(config.getRootPath());

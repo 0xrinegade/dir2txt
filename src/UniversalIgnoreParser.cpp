@@ -82,7 +82,7 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
     }
     
     // Security: Limit number of wildcards to prevent catastrophic backtracking
-    if (asteriskCount > Constants::MAX_ASTERISK_COUNT || dotCount > Constants::MAX_DOT_COUNT) {
+    if (asteriskCount > maxAsteriskCount || dotCount > maxDotCount) {
         throw std::invalid_argument("Pattern too complex");
     }
 
@@ -134,4 +134,9 @@ std::string UniversalIgnoreParser::escapeRegexSpecialChars(const std::string& in
     }
     
     return escaped;
+}
+
+void UniversalIgnoreParser::setComplexityLimits(size_t maxAsterisk, size_t maxDots) {
+    maxAsteriskCount = maxAsterisk;
+    maxDotCount = maxDots;
 }

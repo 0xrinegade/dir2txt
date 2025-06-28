@@ -1,6 +1,8 @@
 // include/Constants.h
 #pragma once
 
+#include <cstddef>  // for size_t
+
 namespace Constants {
     // Security limits for input validation
     constexpr size_t MAX_PATH_LENGTH = 1024;
@@ -24,4 +26,7 @@ namespace Constants {
     
     // Cache size limits
     constexpr size_t MAX_PATH_CACHE_SIZE = 1024;
+    // Note: No automatic eviction policy implemented. 
+    // Cache growth is bounded by MAX_PATH_CACHE_SIZE and typical path patterns
+    // In practice, cache rarely exceeds a few hundred entries during normal operation
 }

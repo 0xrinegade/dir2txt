@@ -7,27 +7,46 @@
 
 std::vector<std::string> CommentStripper::strip(const std::filesystem::path& filePath) {
     std::ifstream file(filePath);
-    std::vector<std::string> result;
-    if (!file) return result;
+    std::vector<std::string> inputLines;
+    if (!file) return inputLines;
 
     std::string line;
+    size_t lineCount = 0;
+
+    // Read all lines from file
+    while (std::getline(file, line) && lineCount < Constants::MAX_LINES_PER_FILE) {
+        inputLines.push_back(line);
+        lineCount++;
+    }
+    
+    // Process the lines using decoupled logic
+    auto result = processLines(inputLines);
+    
+    // Security: Add truncation notice if file was too long
+    if (lineCount >= Constants::MAX_LINES_PER_FILE) {
+        result.push_back("[FILE TRUNCATED - TOO MANY LINES]");
+    }
+
+    return result;
+}
+
+std::vector<std::string> CommentStripper::processLines(const std::vector<std::string>& inputLines) {
+    std::vector<std::string> result;
     bool inBlock = false;
     std::vector<std::string> tempBlock;
     std::vector<std::string> singleLineBuffer;
-    size_t lineCount = 0;
 
-    while (std::getline(file, line) && lineCount < Constants::MAX_LINES_PER_FILE) {
-        line = truncateLineIfNeeded(line);
-        std::string trimmed = trim(line);
-        lineCount++;
+    for (const auto& line : inputLines) {
+        std::string processedLine = truncateLineIfNeeded(line);
+        std::string trimmed = trim(processedLine);
 
         if (inBlock) {
             if (endsCommentBlock(trimmed)) {
-                tempBlock.push_back(line);
+                tempBlock.push_back(processedLine);
                 inBlock = false;
                 flushBlockComments(tempBlock, result);
             } else {
-                tempBlock.push_back(line);
+                tempBlock.push_back(processedLine);
             }
             continue;
         }
@@ -36,11 +55,11 @@ std::vector<std::string> CommentStripper::strip(const std::filesystem::path& fil
             inBlock = true;
             tempBlock.clear();
             if (!endsCommentBlock(trimmed)) {
-                tempBlock.push_back(line);
+                tempBlock.push_back(processedLine);
                 continue;
             } else {
                 // one-liner /** ... */
-                tempBlock.push_back(line);
+                tempBlock.push_back(processedLine);
                 inBlock = false;
                 flushBlockComments(tempBlock, result);
                 continue;
@@ -48,18 +67,13 @@ std::vector<std::string> CommentStripper::strip(const std::filesystem::path& fil
         }
 
         if (isSingleLineComment(trimmed)) {
-            singleLineBuffer.push_back(line);
+            singleLineBuffer.push_back(processedLine);
             continue;
         }
 
         // Flush single-line buffer if applicable
         flushSingleLineComments(singleLineBuffer, result);
-        result.push_back(line);
-    }
-    
-    // Security: Add truncation notice if file was too long
-    if (lineCount >= Constants::MAX_LINES_PER_FILE) {
-        result.push_back("[FILE TRUNCATED - TOO MANY LINES]");
+        result.push_back(processedLine);
     }
 
     // Final flush if file ends with single-line comment(s)

@@ -9,7 +9,15 @@ DirectoryWalker::DirectoryWalker(
     std::shared_ptr<IFileFilter> filter,
     std::shared_ptr<IWriter> writer,
     bool enableLogging)
-    : rootPath(root), filter(std::move(filter)), writer(std::move(writer)), loggingEnabled(enableLogging) {}
+    : rootPath(root), filter(std::move(filter)), writer(std::move(writer)), loggingEnabled(enableLogging) {
+    
+    // Cache the canonical root path for performance
+    try {
+        rootCanonical = std::filesystem::canonical(rootPath);
+    } catch (...) {
+        rootCanonical = rootPath;  // Fallback to original path
+    }
+}
 
 void DirectoryWalker::walk() {
     writer->writeHeader(rootPath);
@@ -20,6 +28,8 @@ void DirectoryWalker::walk() {
 
 void DirectoryWalker::writeTree(const std::filesystem::path& path, const std::string& prefix) {
     // Security: Prevent infinite recursion from deep directory structures
+    // NOTE: thread_local counter is not thread-safe across multiple DirectoryWalker instances
+    // Each thread gets its own counter, which is the intended behavior for recursion tracking
     static thread_local int recursionDepth = 0;
     if (recursionDepth > Constants::MAX_RECURSION_DEPTH) {
         logSkipped("Maximum recursion depth reached", path);
@@ -33,32 +43,14 @@ void DirectoryWalker::writeTree(const std::filesystem::path& path, const std::st
                 continue;
             }
 
-            // Security: Check for symlinks that could lead outside root
-            if (entry.is_symlink()) {
-                try {
-                    auto canonical = std::filesystem::canonical(entry.path());
-                    auto rootCanonical = std::filesystem::canonical(rootPath);
-                    auto relativePath = std::filesystem::relative(canonical, rootCanonical);
-                    // Skip symlinks that point outside the root directory
-                    if (relativePath.string().substr(0, 2) == "..") {
-                        logSkipped("Symlink points outside root directory", entry.path());
-                        continue;
-                    }
-                } catch (...) {
-                    // Skip symlinks that can't be resolved
-                    logSkipped("Symlink cannot be resolved", entry.path());
-                    continue;
-                }
+            // Security: Validate path security (symlinks and traversal protection)
+            if (!validatePathSecurity(entry.path())) {
+                continue;
             }
 
             std::filesystem::path relPath;
             try {
                 relPath = std::filesystem::relative(entry.path(), rootPath);
-                // Security: Ensure relative path doesn't escape root
-                if (relPath.string().substr(0, 2) == "..") {
-                    logSkipped("Path escapes root directory", entry.path());
-                    continue;
-                }
             } catch (...) {
                 relPath = entry.path().filename();  // fallback
             }
@@ -81,6 +73,8 @@ void DirectoryWalker::writeTree(const std::filesystem::path& path, const std::st
 
 void DirectoryWalker::writeFiles(const std::filesystem::path& path) {
     // Security: Prevent infinite recursion from deep directory structures
+    // NOTE: thread_local counter is not thread-safe across multiple DirectoryWalker instances
+    // Each thread gets its own counter, which is the intended behavior for recursion tracking
     static thread_local int recursionDepth = 0;
     if (recursionDepth > Constants::MAX_RECURSION_DEPTH) {
         logSkipped("Maximum recursion depth reached", path);
@@ -94,34 +88,9 @@ void DirectoryWalker::writeFiles(const std::filesystem::path& path) {
                 continue;
             }
 
-            // Security: Check for symlinks that could lead outside root
-            if (entry.is_symlink()) {
-                try {
-                    auto canonical = std::filesystem::canonical(entry.path());
-                    auto rootCanonical = std::filesystem::canonical(rootPath);
-                    auto relativePath = std::filesystem::relative(canonical, rootCanonical);
-                    // Skip symlinks that point outside the root directory
-                    if (relativePath.string().substr(0, 2) == "..") {
-                        logSkipped("Symlink points outside root directory", entry.path());
-                        continue;
-                    }
-                } catch (...) {
-                    // Skip symlinks that can't be resolved
-                    logSkipped("Symlink cannot be resolved", entry.path());
-                    continue;
-                }
-            }
-
-            // Security: Additional path validation
-            try {
-                auto relPath = std::filesystem::relative(entry.path(), rootPath);
-                if (relPath.string().substr(0, 2) == "..") {
-                    logSkipped("Path escapes root directory", entry.path());
-                    continue;  // Skip paths that escape root
-                }
-            } catch (...) {
-                logSkipped("Cannot make path relative", entry.path());
-                continue;  // Skip paths that can't be made relative
+            // Security: Validate path security (symlinks and traversal protection)
+            if (!validatePathSecurity(entry.path())) {
+                continue;
             }
 
             if (entry.is_directory()) {
@@ -162,4 +131,37 @@ void DirectoryWalker::logSkipped(const std::string& reason, const std::filesyste
     if (loggingEnabled) {
         std::cerr << "⚠️ Skipped: " << reason << " - " << path << std::endl;
     }
+}
+
+bool DirectoryWalker::validatePathSecurity(const std::filesystem::path& entryPath) {
+    // Security: Check for symlinks that could lead outside root
+    if (std::filesystem::is_symlink(entryPath)) {
+        try {
+            auto canonical = std::filesystem::canonical(entryPath);
+            auto relativePath = std::filesystem::relative(canonical, rootCanonical);
+            // Skip symlinks that point outside the root directory
+            if (relativePath.string().substr(0, 2) == "..") {
+                logSkipped("Symlink points outside root directory", entryPath);
+                return false;
+            }
+        } catch (...) {
+            // Skip symlinks that can't be resolved
+            logSkipped("Symlink cannot be resolved", entryPath);
+            return false;
+        }
+    }
+
+    // Security: Additional path validation to prevent directory traversal
+    try {
+        auto relPath = std::filesystem::relative(entryPath, rootPath);
+        if (relPath.string().substr(0, 2) == "..") {
+            logSkipped("Path escapes root directory", entryPath);
+            return false;
+        }
+    } catch (...) {
+        logSkipped("Cannot make path relative", entryPath);
+        return false;
+    }
+
+    return true;
 }
