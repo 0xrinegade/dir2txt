@@ -60,8 +60,20 @@ void FileWriterText::writeFileContents(const std::filesystem::path& filePath,
             out << "[Unable to Read File]\n";
         } else {
             std::string line;
-            while (std::getline(file, line)) {
+            size_t lineCount = 0;
+            const size_t maxLines = 50000;  // Security: Limit lines per file
+            
+            while (std::getline(file, line) && lineCount < maxLines) {
+                // Security: Limit line length to prevent memory issues
+                if (line.length() > 10000) {
+                    line = line.substr(0, 10000) + " [LINE TRUNCATED]";
+                }
                 out << line << "\n";
+                lineCount++;
+            }
+            
+            if (lineCount >= maxLines) {
+                out << "\n[FILE TRUNCATED - TOO MANY LINES]\n";
             }
         }
     }

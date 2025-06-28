@@ -71,8 +71,20 @@ void FileWriterJson::writeFileContents(const std::filesystem::path& filePath,
             return;
         }
         std::string line;
-        while (std::getline(file, line)) {
+        size_t lineCount = 0;
+        const size_t maxLines = 50000;  // Security: Limit lines per file
+        
+        while (std::getline(file, line) && lineCount < maxLines) {
+            // Security: Limit line length to prevent memory issues
+            if (line.length() > 10000) {
+                line = line.substr(0, 10000) + " [LINE TRUNCATED]";
+            }
             lines.push_back(line);
+            lineCount++;
+        }
+        
+        if (lineCount >= maxLines) {
+            lines.push_back("[FILE TRUNCATED - TOO MANY LINES]");
         }
     }
 

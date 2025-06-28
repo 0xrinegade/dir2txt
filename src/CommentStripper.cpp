@@ -13,9 +13,17 @@ std::vector<std::string> CommentStripper::strip(const std::filesystem::path& fil
     bool inBlock = false;
     std::vector<std::string> tempBlock;
     std::vector<std::string> singleLineBuffer;
+    size_t lineCount = 0;
+    const size_t maxLines = 50000;  // Security: Limit lines processed
 
-    while (std::getline(file, line)) {
+    while (std::getline(file, line) && lineCount < maxLines) {
+        // Security: Limit line length to prevent memory issues
+        if (line.length() > 10000) {
+            line = line.substr(0, 10000) + " [LINE TRUNCATED]";
+        }
+        
         std::string trimmed = trim(line);
+        lineCount++;
 
         if (inBlock) {
             if (endsCommentBlock(trimmed)) {
@@ -67,6 +75,11 @@ std::vector<std::string> CommentStripper::strip(const std::filesystem::path& fil
         }
 
         result.push_back(line);
+    }
+    
+    // Security: Add truncation notice if file was too long
+    if (lineCount >= maxLines) {
+        result.push_back("[FILE TRUNCATED - TOO MANY LINES]");
     }
 
     // Final flush if file ends with single-line comment(s)
