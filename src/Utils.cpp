@@ -1,8 +1,11 @@
 // src/Utils.cpp
 #include "Utils.h"
+#include "Constants.h"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <cctype>
+#include <mutex>
 
 namespace Utils {
 
@@ -23,6 +26,10 @@ namespace Utils {
     std::string getCurrentTimestamp() {
         auto now = std::chrono::system_clock::now();
         std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+        
+        // Thread-safe time formatting using a mutex
+        static std::mutex time_mutex;
+        std::lock_guard<std::mutex> lock(time_mutex);
         std::tm local_tm = *std::localtime(&now_time);
     
         std::ostringstream oss;
@@ -36,7 +43,34 @@ namespace Utils {
             cleaned = cleaned.parent_path();
         }
         std::string dirName = cleaned.filename().string();
+        
+        // Security: Sanitize directory name for safe filename
+        std::string sanitizedDirName;
+        for (char c : dirName) {
+            if (std::isalnum(c) || c == '_' || c == '-') {
+                sanitizedDirName += c;
+            } else {
+                sanitizedDirName += '_';
+            }
+        }
+        
+        // Security: Ensure filename isn't empty and has reasonable length
+        if (sanitizedDirName.empty()) {
+            sanitizedDirName = "output";
+        }
+        if (sanitizedDirName.length() > Constants::MAX_FILENAME_LENGTH) {
+            sanitizedDirName = sanitizedDirName.substr(0, Constants::MAX_FILENAME_LENGTH);
+        }
+        
         std::string timestamp = getCurrentTimestamp();
-        return dirName + "_" + timestamp + "_dir2txt.txt";
+        std::string filename = sanitizedDirName + "_" + timestamp + "_dir2txt.txt";
+        
+        // Security: Ensure filename doesn't start with . or contain path separators
+        if (filename[0] == '.' || filename.find('/') != std::string::npos || 
+            filename.find('\\') != std::string::npos) {
+            filename = "output_" + timestamp + "_dir2txt.txt";
+        }
+        
+        return filename;
     }
 }

@@ -2,6 +2,7 @@
 #include "FileFilter.h"
 #include "Utils.h"
 #include <fstream>
+#include <vector>
 
 const std::set<std::string> FileFilter::alwaysIgnored = {
     ".git", ".svn", ".hg", ".cache"
@@ -9,11 +10,14 @@ const std::set<std::string> FileFilter::alwaysIgnored = {
 
 FileFilter::FileFilter(bool includeDotfiles,
                        std::set<std::string> ignoredDirs,
-                       const std::filesystem::path& rootPath)
+                       const std::filesystem::path& rootPath,
+                       size_t maxAsteriskCount,
+                       size_t maxDotCount)
     : includeDotfiles(includeDotfiles),
       ignoredDirs(std::move(ignoredDirs)),
       root(rootPath),
       ignoreParser(std::make_unique<UniversalIgnoreParser>()) {
+        ignoreParser->setComplexityLimits(maxAsteriskCount, maxDotCount);
         ignoreParser->loadFromDirectory(root);
         // Apply --ignore overrides
         for (const auto& entry : this->ignoredDirs) {
@@ -25,20 +29,51 @@ bool FileFilter::isBinary(const std::filesystem::path& filePath) const {
     std::ifstream file(filePath, std::ios::binary);
     if (!file) return true;
 
-    const size_t maxBytes = 4096;
-    char buffer[maxBytes];
-    file.read(buffer, maxBytes);
+    // Security: Use smaller buffer and add bounds checking
+    const size_t maxBytes = 1024;
+    std::vector<char> buffer(maxBytes);
+    
+    file.read(buffer.data(), maxBytes);
     std::streamsize bytesRead = file.gcount();
+    
+    // Security: Validate bytesRead is within expected bounds
+    if (bytesRead < 0 || static_cast<size_t>(bytesRead) > maxBytes) {
+        return true;  // Treat as binary if unexpected read size
+    }
+
+    // Check for UTF-16 BOM (Byte Order Mark)
+    if (bytesRead >= 2) {
+        unsigned char b1 = static_cast<unsigned char>(buffer[0]);
+        unsigned char b2 = static_cast<unsigned char>(buffer[1]);
+        
+        // UTF-16 LE BOM (FF FE) or UTF-16 BE BOM (FE FF)
+        if ((b1 == 0xFF && b2 == 0xFE) || (b1 == 0xFE && b2 == 0xFF)) {
+            return false;  // UTF-16 text file with BOM
+        }
+        
+        // UTF-8 BOM (EF BB BF)
+        if (bytesRead >= 3) {
+            unsigned char b3 = static_cast<unsigned char>(buffer[2]);
+            if (b1 == 0xEF && b2 == 0xBB && b3 == 0xBF) {
+                return false;  // UTF-8 text file with BOM
+            }
+        }
+    }
 
     size_t nonPrintable = 0;
     for (std::streamsize i = 0; i < bytesRead; ++i) {
-        unsigned char c = static_cast<unsigned char>(buffer[i]);
-        if (c == 9 || c == 10 || c == 13) continue;
+        unsigned char c = static_cast<unsigned char>(buffer[static_cast<size_t>(i)]);
+        if (c == 9 || c == 10 || c == 13) continue;  // tab, newline, carriage return
         if (c < 32 || c > 126) ++nonPrintable;
-        // 🚀 Early exit: if threshold is crossed
-        if (nonPrintable > 0.3 * (i + 1)) return true;
+        
+        // Security: Early exit with safer threshold calculation
+        if (i > 0 && nonPrintable > static_cast<size_t>(0.3 * (i + 1))) {
+            return true;
+        }
     }
-    return false;
+    
+    // Security: If more than 30% non-printable characters, consider binary
+    return bytesRead > 0 && nonPrintable > static_cast<size_t>(0.3 * bytesRead);
 }
 
 bool FileFilter::shouldIgnore(const std::filesystem::path& path) const {

@@ -1,6 +1,7 @@
 // src/FileWriterText.cpp
 #include "FileWriterText.h"
 #include "CommentStripper.h"
+#include "Constants.h"
 #include <iostream>
 #include <fstream>
 
@@ -60,8 +61,17 @@ void FileWriterText::writeFileContents(const std::filesystem::path& filePath,
             out << "[Unable to Read File]\n";
         } else {
             std::string line;
-            while (std::getline(file, line)) {
+            size_t lineCount = 0;
+            
+            while (std::getline(file, line) && lineCount < Constants::MAX_LINES_PER_FILE) {
+                // Security: Use the same UTF-8 safe truncation as CommentStripper
+                line = CommentStripper::truncateLineIfNeeded(line);
                 out << line << "\n";
+                lineCount++;
+            }
+            
+            if (lineCount >= Constants::MAX_LINES_PER_FILE) {
+                out << "\n[FILE TRUNCATED - TOO MANY LINES]\n";
             }
         }
     }
