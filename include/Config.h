@@ -14,6 +14,7 @@ class Config {
         bool shouldIncludeDotfiles() const;
         bool shouldStripComments() const;
         bool outputAsJson() const;
+        bool shouldEnableLogging() const;
     
     private:
         std::filesystem::path rootPath;
@@ -21,4 +22,5 @@ class Config {
         bool includeDotfiles = false;
         bool stripComments = false;
         bool asJson = false;
+        bool enableLogging = false;
     };

@@ -1,9 +1,11 @@
 // src/Utils.cpp
 #include "Utils.h"
+#include "Constants.h"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <cctype>
+#include <mutex>
 
 namespace Utils {
 
@@ -24,6 +26,10 @@ namespace Utils {
     std::string getCurrentTimestamp() {
         auto now = std::chrono::system_clock::now();
         std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+        
+        // Thread-safe time formatting using a mutex
+        static std::mutex time_mutex;
+        std::lock_guard<std::mutex> lock(time_mutex);
         std::tm local_tm = *std::localtime(&now_time);
     
         std::ostringstream oss;
@@ -52,8 +58,8 @@ namespace Utils {
         if (sanitizedDirName.empty()) {
             sanitizedDirName = "output";
         }
-        if (sanitizedDirName.length() > 100) {
-            sanitizedDirName = sanitizedDirName.substr(0, 100);
+        if (sanitizedDirName.length() > Constants::MAX_FILENAME_LENGTH) {
+            sanitizedDirName = sanitizedDirName.substr(0, Constants::MAX_FILENAME_LENGTH);
         }
         
         std::string timestamp = getCurrentTimestamp();

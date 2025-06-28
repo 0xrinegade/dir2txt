@@ -1,4 +1,4 @@
-// include/UniversalIgnoreParser
+// include/UniversalIgnoreParser.h
 #pragma once
 
 #include <filesystem>
@@ -19,6 +19,7 @@ private:
 
     std::regex convertToRegex(const std::string& pattern) const;
     void loadFromFile(const std::filesystem::path& file);
+    std::string escapeRegexSpecialChars(const std::string& input) const;
 
     const std::vector<std::string> knownIgnoreFiles = {
         ".gitignore", ".dockerignore", ".npmignore", ".dir2txtignore"

@@ -12,15 +12,18 @@ class DirectoryWalker : public IDirectoryWalker {
 public:
     DirectoryWalker(const std::filesystem::path& root,
                     std::shared_ptr<IFileFilter> filter,
-                    std::shared_ptr<IWriter> writer);
+                    std::shared_ptr<IWriter> writer,
+                    bool enableLogging = false);
 
     void walk() override;
 
 private:
     void writeTree(const std::filesystem::path& path, const std::string& prefix = "");
     void writeFiles(const std::filesystem::path& path);
+    void logSkipped(const std::string& reason, const std::filesystem::path& path);
 
     std::filesystem::path rootPath;
     std::shared_ptr<IFileFilter> filter;
     std::shared_ptr<IWriter> writer;
+    bool loggingEnabled;
 };

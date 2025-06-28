@@ -40,7 +40,8 @@ int main(int argc, char* argv[]) {
     DirectoryWalker walker(
         config.getRootPath(),
         filter,
-        writer
+        writer,
+        config.shouldEnableLogging()
     );
 
     walker.walk();

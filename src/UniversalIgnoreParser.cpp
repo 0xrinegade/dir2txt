@@ -1,5 +1,6 @@
 // src/UniversalIgnoreParser.cpp
 #include "UniversalIgnoreParser.h"
+#include "Constants.h"
 #include <fstream>
 #include <iostream>
 
@@ -36,7 +37,7 @@ bool UniversalIgnoreParser::shouldIgnore(const std::filesystem::path& relPath) c
     std::string pathStr = relPath.generic_string();
     
     // Security: Limit path string length to prevent ReDoS
-    if (pathStr.length() > 1024) {
+    if (pathStr.length() > Constants::MAX_PATH_LENGTH) {
         return false;  // Very long paths are likely not in ignore patterns
     }
 
@@ -64,7 +65,7 @@ bool UniversalIgnoreParser::shouldIgnore(const std::filesystem::path& relPath) c
 
 std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) const {
     // Security: Validate pattern to prevent ReDoS attacks
-    if (pattern.empty() || pattern.length() > 256) {
+    if (pattern.empty() || pattern.length() > Constants::MAX_PATTERN_LENGTH) {
         throw std::invalid_argument("Invalid pattern length");
     }
     
@@ -81,7 +82,7 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
     }
     
     // Security: Limit number of wildcards to prevent catastrophic backtracking
-    if (asteriskCount > 5 || dotCount > 10) {
+    if (asteriskCount > Constants::MAX_ASTERISK_COUNT || dotCount > Constants::MAX_DOT_COUNT) {
         throw std::invalid_argument("Pattern too complex");
     }
 
@@ -89,26 +90,10 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
 
     if (pattern.back() == '/') {
         std::string dirName = pattern.substr(0, pattern.length() - 1);
-        // Security: Escape special regex characters in directory name
-        std::string escapedDirName;
-        for (char c : dirName) {
-            if (c == '.' || c == '^' || c == '$' || c == '|' || c == '(' || c == ')' || 
-                c == '[' || c == ']' || c == '{' || c == '}' || c == '+' || c == '?') {
-                escapedDirName += "\\";
-            }
-            escapedDirName += c;
-        }
+        std::string escapedDirName = escapeRegexSpecialChars(dirName);
         regexStr += "(" + escapedDirName + ")(/.*)?$";
     } else if (pattern.find('/') == std::string::npos && pattern.find('*') == std::string::npos) {
-        // Security: Escape the pattern for literal matching
-        std::string escapedPattern;
-        for (char c : pattern) {
-            if (c == '.' || c == '^' || c == '$' || c == '|' || c == '(' || c == ')' || 
-                c == '[' || c == ']' || c == '{' || c == '}' || c == '+' || c == '?') {
-                escapedPattern += "\\";
-            }
-            escapedPattern += c;
-        }
+        std::string escapedPattern = escapeRegexSpecialChars(pattern);
         regexStr = ".*/" + escapedPattern + "$|^" + escapedPattern + "$";
     } else {
         for (char c : pattern) {
@@ -133,4 +118,20 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
     } catch (const std::regex_error& e) {
         throw std::invalid_argument("Failed to compile regex pattern: " + pattern);
     }
+}
+
+std::string UniversalIgnoreParser::escapeRegexSpecialChars(const std::string& input) const {
+    std::string escaped;
+    escaped.reserve(input.length() * 2);  // Reserve space to avoid reallocations
+    
+    const std::string specialChars = ".^$|()[]{}+?";
+    
+    for (char c : input) {
+        if (specialChars.find(c) != std::string::npos) {
+            escaped += "\\";
+        }
+        escaped += c;
+    }
+    
+    return escaped;
 }
