@@ -2,6 +2,7 @@
 #include "FileFilter.h"
 #include "Utils.h"
 #include <fstream>
+#include <vector>
 
 const std::set<std::string> FileFilter::alwaysIgnored = {
     ".git", ".svn", ".hg", ".cache"
@@ -25,20 +26,32 @@ bool FileFilter::isBinary(const std::filesystem::path& filePath) const {
     std::ifstream file(filePath, std::ios::binary);
     if (!file) return true;
 
-    const size_t maxBytes = 4096;
-    char buffer[maxBytes];
-    file.read(buffer, maxBytes);
+    // Security: Use smaller buffer and add bounds checking
+    const size_t maxBytes = 1024;
+    std::vector<char> buffer(maxBytes);
+    
+    file.read(buffer.data(), maxBytes);
     std::streamsize bytesRead = file.gcount();
+    
+    // Security: Validate bytesRead is within expected bounds
+    if (bytesRead < 0 || static_cast<size_t>(bytesRead) > maxBytes) {
+        return true;  // Treat as binary if unexpected read size
+    }
 
     size_t nonPrintable = 0;
     for (std::streamsize i = 0; i < bytesRead; ++i) {
-        unsigned char c = static_cast<unsigned char>(buffer[i]);
-        if (c == 9 || c == 10 || c == 13) continue;
+        unsigned char c = static_cast<unsigned char>(buffer[static_cast<size_t>(i)]);
+        if (c == 9 || c == 10 || c == 13) continue;  // tab, newline, carriage return
         if (c < 32 || c > 126) ++nonPrintable;
-        // 🚀 Early exit: if threshold is crossed
-        if (nonPrintable > 0.3 * (i + 1)) return true;
+        
+        // Security: Early exit with safer threshold calculation
+        if (i > 0 && nonPrintable > static_cast<size_t>(0.3 * (i + 1))) {
+            return true;
+        }
     }
-    return false;
+    
+    // Security: If more than 30% non-printable characters, consider binary
+    return bytesRead > 0 && nonPrintable > static_cast<size_t>(0.3 * bytesRead);
 }
 
 bool FileFilter::shouldIgnore(const std::filesystem::path& path) const {

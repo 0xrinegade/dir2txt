@@ -3,6 +3,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <cctype>
 
 namespace Utils {
 
@@ -36,7 +37,34 @@ namespace Utils {
             cleaned = cleaned.parent_path();
         }
         std::string dirName = cleaned.filename().string();
+        
+        // Security: Sanitize directory name for safe filename
+        std::string sanitizedDirName;
+        for (char c : dirName) {
+            if (std::isalnum(c) || c == '_' || c == '-') {
+                sanitizedDirName += c;
+            } else {
+                sanitizedDirName += '_';
+            }
+        }
+        
+        // Security: Ensure filename isn't empty and has reasonable length
+        if (sanitizedDirName.empty()) {
+            sanitizedDirName = "output";
+        }
+        if (sanitizedDirName.length() > 100) {
+            sanitizedDirName = sanitizedDirName.substr(0, 100);
+        }
+        
         std::string timestamp = getCurrentTimestamp();
-        return dirName + "_" + timestamp + "_dir2txt.txt";
+        std::string filename = sanitizedDirName + "_" + timestamp + "_dir2txt.txt";
+        
+        // Security: Ensure filename doesn't start with . or contain path separators
+        if (filename[0] == '.' || filename.find('/') != std::string::npos || 
+            filename.find('\\') != std::string::npos) {
+            filename = "output_" + timestamp + "_dir2txt.txt";
+        }
+        
+        return filename;
     }
 }

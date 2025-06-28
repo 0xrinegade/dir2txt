@@ -27,7 +27,29 @@ Config::Config(int argc, char* argv[]) {
             std::exit(0);
         }
 
-        rootPath = std::filesystem::path(result["directory"].as<std::string>());
+        std::string dirPath = result["directory"].as<std::string>();
+        
+        // Security: Validate directory path
+        if (dirPath.empty() || dirPath.length() > 1024) {
+            std::cerr << "❌ Invalid directory path length" << std::endl;
+            std::exit(1);
+        }
+        
+        // Security: Check for suspicious path patterns
+        if (dirPath.find("..") != std::string::npos) {
+            std::cerr << "❌ Path traversal not allowed" << std::endl;
+            std::exit(1);
+        }
+
+        rootPath = std::filesystem::path(dirPath);
+
+        // Security: Canonicalize path to prevent traversal attacks
+        try {
+            rootPath = std::filesystem::canonical(rootPath);
+        } catch (const std::filesystem::filesystem_error&) {
+            std::cerr << "❌ Cannot resolve directory path: " << dirPath << std::endl;
+            std::exit(1);
+        }
 
         if (!std::filesystem::exists(rootPath) || !std::filesystem::is_directory(rootPath)) {
             std::cerr << "❌ Invalid directory: " << rootPath << std::endl;
@@ -36,12 +58,30 @@ Config::Config(int argc, char* argv[]) {
 
         if (result.count("ignore")) {
             std::string list = result["ignore"].as<std::string>();
+            
+            // Security: Validate ignore list length
+            if (list.length() > 2048) {
+                std::cerr << "❌ Ignore list too long" << std::endl;
+                std::exit(1);
+            }
+            
             size_t pos;
+            size_t patternCount = 0;
             while ((pos = list.find(',')) != std::string::npos) {
-                ignoredDirs.insert(list.substr(0, pos));
+                std::string pattern = list.substr(0, pos);
+                // Security: Limit number and length of ignore patterns
+                if (++patternCount > 50 || pattern.length() > 256) {
+                    std::cerr << "❌ Too many or too long ignore patterns" << std::endl;
+                    std::exit(1);
+                }
+                ignoredDirs.insert(pattern);
                 list.erase(0, pos + 1);
             }
             if (!list.empty()) {
+                if (++patternCount > 50 || list.length() > 256) {
+                    std::cerr << "❌ Too many or too long ignore patterns" << std::endl;
+                    std::exit(1);
+                }
                 ignoredDirs.insert(list);
             }
         }

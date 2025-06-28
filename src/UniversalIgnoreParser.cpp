@@ -34,6 +34,11 @@ void UniversalIgnoreParser::addManualIgnore(const std::string& pattern) {
 
 bool UniversalIgnoreParser::shouldIgnore(const std::filesystem::path& relPath) const {
     std::string pathStr = relPath.generic_string();
+    
+    // Security: Limit path string length to prevent ReDoS
+    if (pathStr.length() > 1024) {
+        return false;  // Very long paths are likely not in ignore patterns
+    }
 
     auto it = cache.find(pathStr);
     if (it != cache.end()) {
@@ -41,9 +46,15 @@ bool UniversalIgnoreParser::shouldIgnore(const std::filesystem::path& relPath) c
     }
 
     for (const auto& regex : patterns) {
-        if (std::regex_match(pathStr, regex)) {
-            cache[pathStr] = true;
-            return true;
+        try {
+            // Security: Use std::regex_match which is generally safer than std::regex_search
+            if (std::regex_match(pathStr, regex)) {
+                cache[pathStr] = true;
+                return true;
+            }
+        } catch (const std::regex_error&) {
+            // Security: Skip malformed regex patterns that somehow got through
+            continue;
         }
     }
 
@@ -52,24 +63,74 @@ bool UniversalIgnoreParser::shouldIgnore(const std::filesystem::path& relPath) c
 }
 
 std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) const {
+    // Security: Validate pattern to prevent ReDoS attacks
+    if (pattern.empty() || pattern.length() > 256) {
+        throw std::invalid_argument("Invalid pattern length");
+    }
+    
+    // Security: Check for potentially dangerous regex patterns
+    size_t asteriskCount = 0;
+    size_t dotCount = 0;
+    for (char c : pattern) {
+        if (c == '*') asteriskCount++;
+        if (c == '.') dotCount++;
+        // Prevent control characters that could cause issues
+        if (c < 32 && c != '\t' && c != '\n' && c != '\r') {
+            throw std::invalid_argument("Invalid character in pattern");
+        }
+    }
+    
+    // Security: Limit number of wildcards to prevent catastrophic backtracking
+    if (asteriskCount > 5 || dotCount > 10) {
+        throw std::invalid_argument("Pattern too complex");
+    }
+
     std::string regexStr = "^";
 
     if (pattern.back() == '/') {
         std::string dirName = pattern.substr(0, pattern.length() - 1);
-        regexStr += "(" + dirName + ")(/.*)?$";
+        // Security: Escape special regex characters in directory name
+        std::string escapedDirName;
+        for (char c : dirName) {
+            if (c == '.' || c == '^' || c == '$' || c == '|' || c == '(' || c == ')' || 
+                c == '[' || c == ']' || c == '{' || c == '}' || c == '+' || c == '?') {
+                escapedDirName += "\\";
+            }
+            escapedDirName += c;
+        }
+        regexStr += "(" + escapedDirName + ")(/.*)?$";
     } else if (pattern.find('/') == std::string::npos && pattern.find('*') == std::string::npos) {
-        regexStr = ".*/" + pattern + "$|^" + pattern + "$";
+        // Security: Escape the pattern for literal matching
+        std::string escapedPattern;
+        for (char c : pattern) {
+            if (c == '.' || c == '^' || c == '$' || c == '|' || c == '(' || c == ')' || 
+                c == '[' || c == ']' || c == '{' || c == '}' || c == '+' || c == '?') {
+                escapedPattern += "\\";
+            }
+            escapedPattern += c;
+        }
+        regexStr = ".*/" + escapedPattern + "$|^" + escapedPattern + "$";
     } else {
         for (char c : pattern) {
             switch (c) {
-                case '*': regexStr += ".*"; break;
+                case '*': regexStr += "[^/]*"; break;  // Security: Make * non-greedy for paths
                 case '.': regexStr += "\\."; break;
                 case '/': regexStr += "/"; break;
+                // Security: Escape other regex metacharacters
+                case '^': case '$': case '|': case '(': case ')':
+                case '[': case ']': case '{': case '}': case '+': case '?':
+                    regexStr += "\\";
+                    regexStr += c;
+                    break;
                 default:  regexStr += c; break;
             }
         }
         regexStr += "$";
     }
 
-    return std::regex(regexStr);
+    try {
+        return std::regex(regexStr, std::regex_constants::optimize);
+    } catch (const std::regex_error& e) {
+        throw std::invalid_argument("Failed to compile regex pattern: " + pattern);
+    }
 }
