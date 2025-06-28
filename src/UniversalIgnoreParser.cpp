@@ -3,6 +3,7 @@
 #include "Constants.h"
 #include <fstream>
 #include <iostream>
+#include <string_view>
 
 void UniversalIgnoreParser::loadFromDirectory(const std::filesystem::path& root) {
     for (const auto& ignoreFile : knownIgnoreFiles) {
@@ -89,8 +90,8 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
     std::string regexStr = "^";
 
     if (pattern.back() == '/') {
-        std::string dirName = pattern.substr(0, pattern.length() - 1);
-        std::string escapedDirName = escapeRegexSpecialChars(dirName);
+        // Avoid substr copy by passing length to escapeRegexSpecialChars
+        std::string escapedDirName = escapeRegexSpecialChars(pattern, pattern.length() - 1);
         regexStr += "(" + escapedDirName + ")(/.*)?$";
     } else if (pattern.find('/') == std::string::npos && pattern.find('*') == std::string::npos) {
         std::string escapedPattern = escapeRegexSpecialChars(pattern);
@@ -121,12 +122,17 @@ std::regex UniversalIgnoreParser::convertToRegex(const std::string& pattern) con
 }
 
 std::string UniversalIgnoreParser::escapeRegexSpecialChars(const std::string& input) const {
+    return escapeRegexSpecialChars(input, input.length());
+}
+
+std::string UniversalIgnoreParser::escapeRegexSpecialChars(const std::string& input, size_t length) const {
     std::string escaped;
-    escaped.reserve(input.length() * 2);  // Reserve space to avoid reallocations
+    escaped.reserve(length * 2);  // Reserve space to avoid reallocations
     
     const std::string specialChars = ".^$|()[]{}+?";
     
-    for (char c : input) {
+    for (size_t i = 0; i < length && i < input.length(); ++i) {
+        char c = input[i];
         if (specialChars.find(c) != std::string::npos) {
             escaped += "\\";
         }

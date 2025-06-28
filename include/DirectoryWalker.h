@@ -28,4 +28,5 @@ private:
     std::shared_ptr<IFileFilter> filter;
     std::shared_ptr<IWriter> writer;
     bool loggingEnabled;
+    int currentRecursionDepth = 0;  // Unified recursion depth counter
 };

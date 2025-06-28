@@ -23,6 +23,7 @@ private:
     std::regex convertToRegex(const std::string& pattern) const;
     void loadFromFile(const std::filesystem::path& file);
     std::string escapeRegexSpecialChars(const std::string& input) const;
+    std::string escapeRegexSpecialChars(const std::string& input, size_t length) const;
 
     const std::vector<std::string> knownIgnoreFiles = {
         ".gitignore", ".dockerignore", ".npmignore", ".dir2txtignore"
